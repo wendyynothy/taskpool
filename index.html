@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>任务池</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --surface: #faf9f6;
+    --surface2: #f0ede6;
+    --border: #ddd9cf;
+    --border2: #ccc8bc;
+    --text: #1a1814;
+    --text2: #6b6558;
+    --text3: #9e9888;
+    --accent: #2d4a3e;
+    --accent-light: #e8efe9;
+    --red: #8b3a2a;
+    --red-bg: #f7ece8;
+    --amber: #7a5520;
+    --amber-bg: #f7f0e4;
+    --green: #2d5a3d;
+    --green-bg: #e8f2eb;
+    --blue: #1e3f6b;
+    --blue-bg: #e8eef7;
+    --purple: #4a2d6e;
+    --purple-bg: #f0ebf7;
+    --radius: 6px;
+    --radius-lg: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+  .stats-bar {
+    display: flex;
+    gap: 16px;
+  }
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .stat strong {
+    font-weight: 500;
+    color: var(--text);
+  }
+  .add-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    padding: 7px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .add-btn:hover { opacity: 0.88; }
+  .io-btn {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text2);
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .io-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  .main { max-width: 960px; margin: 0 auto; padding: 24px 20px; }
+  .filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    align-items: center;
+  }
+  .filter-group { display: flex; gap: 6px; align-items: center; }
+  .filter-label { font-size: 12px; color: var(--text3); white-space: nowrap; }
+  select, input[type="text"] {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  select:hover, input[type="text"]:hover { border-color: var(--border2); }
+  select:focus, input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"] { cursor: text; width: 160px; }
+  .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .section { margin-bottom: 28px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .section-count {
+    font-size: 11px;
+    color: var(--text3);
+    background: var(--surface2);
+    border-radius: 99px;
+    padding: 1px 8px;
+  }
+  .task-table { width: 100%; border-collapse: collapse; }
+  .task-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text3);
+    padding: 0 10px 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .task-table th:hover { color: var(--text2); }
+  .task-table th .arrow { opacity: 0.5; margin-left: 2px; font-size: 10px; }
+  .task-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 4px;
+    transition: box-shadow 0.15s, border-color 0.15s;
+    cursor: pointer;
+  }
+  .task-row:hover {
+    border-color: var(--border2);
+    box-shadow: var(--shadow);
+  }
+  .task-row td { padding: 10px 10px; vertical-align: middle; }
+  .task-row td:first-child { padding-left: 14px; border-radius: var(--radius) 0 0 var(--radius); }
+  .task-row td:last-child { padding-right: 10px; border-radius: 0 var(--radius) var(--radius) 0; }
+  .task-name-cell { max-width: 280px; }
+  .task-name { font-weight: 400; color: var(--text); font-size: 13px; line-height: 1.4; }
+  .task-note { font-size: 11px; color: var(--text3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+  .urg-高 { background: var(--red-bg); color: var(--red); }
+  .urg-中 { background: var(--amber-bg); color: var(--amber); }
+  .urg-低 { background: var(--green-bg); color: var(--green); }
+  .imp-高 { background: var(--purple-bg); color: var(--purple); }
+  .imp-中 { background: var(--blue-bg); color: var(--blue); }
+  .imp-低 { background: var(--surface2); color: var(--text2); }
+  .cat-badge { background: var(--surface2); color: var(--text2); }
+  .time-cell { color: var(--text2); font-size: 12px; white-space: nowrap; }
+  .score-cell {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    text-align: center;
+    min-width: 36px;
+  }
+  .action-cell { display: flex; gap: 4px; align-items: center; }
+  .icon-btn {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text3);
+    font-size: 13px;
+    transition: all 0.12s;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover.done { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+  .icon-btn:hover.edit { border-color: var(--border2); color: var(--text2); background: var(--surface2); }
+  .icon-btn:hover.del { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+  .empty-row { text-align: center; padding: 20px; color: var(--text3); font-size: 12px; }
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20,18,14,0.45);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 24px;
+    width: 400px;
+    max-width: 95vw;
+    box-shadow: var(--shadow-lg);
+    animation: modalIn 0.18s ease;
+  }
+  @keyframes modalIn {
+    from { transform: translateY(8px); opacity: 0; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+  .modal-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 18px;
+    color: var(--text);
+  }
+  .form-row { margin-bottom: 13px; }
+  .form-label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; font-weight: 500; letter-spacing: 0.02em; }
+  .form-input, .form-select, .form-textarea {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--accent); }
+  .form-textarea { resize: vertical; min-height: 70px; }
+  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .btn-cancel {
+    height: 32px;
+    padding: 0 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: none;
+    color: var(--text2);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .btn-cancel:hover { background: var(--surface2); }
+  .btn-save {
+    height: 32px;
+    padding: 0 20px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.12s;
+  }
+  .btn-save:hover { opacity: 0.88; }
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: var(--text);
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s;
+    z-index: 200;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .done-section .task-row { opacity: 0.55; }
+  .done-section .task-row:hover { opacity: 0.8; }
+  .done-task-name { text-decoration: line-through; color: var(--text3); }
+  .col-score { width: 50px; text-align: center; }
+  .col-time  { width: 72px; }
+  .col-urg   { width: 60px; }
+  .col-imp   { width: 60px; }
+  .col-cat   { width: 80px; }
+  .col-act   { width: 90px; }
+  @media (max-width: 640px) {
+    .col-score, .stats-bar { display: none; }
+    .header { padding: 0 14px; }
+    .main { padding: 16px 12px; }
+    input[type="text"] { width: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo">任务池</span>
+    <div class="stats-bar" id="stats-bar"></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button class="io-btn" onclick="exportTasks()" title="导出 JSON 到下载文件夹，再手动放入 iCloud Drive">↑ 导出</button>
+    <label class="io-btn" title="从 iCloud Drive 选取 JSON 文件导入">↓ 导入<input type="file" id="import-file" accept=".json" style="display:none" onchange="importTasks(event)"></label>
+    <button class="add-btn" onclick="openModal()">＋ 添加任务</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="filters">
+    <input type="text" id="search" placeholder="搜索任务名称…" oninput="renderAll()">
+    <div class="sep"></div>
+    <span class="filter-label">分类</span>
+    <select id="filt-cat" onchange="renderAll()"><option value="">全部</option></select>
+    <div class="sep"></div>
+    <span class="filter-label">紧急</span>
+    <select id="filt-urg" onchange="renderAll()">
+      <option value="">全部</option>
+      <option>高</option><option>中</option><option>低</option>
+    </select>
+    <span class="filter-label">重要</span>
+    <select id="filt-imp" onchange="renderAll()">
+      <option value="">全部</option>
+      <option>高</option><option>中</option><option>低</option>
+    </select>
+    <div class="sep"></div>
+    <span class="filter-label">时间≤</span>
+    <select id="filt-time" onchange="renderAll()">
+      <option value="">不限</option>
+      <option value="15">15分钟</option>
+      <option value="30">30分钟</option>
+      <option value="60">1小时</option>
+    </select>
+    <div class="sep"></div>
+    <span class="filter-label">排序</span>
+    <select id="sort-key" onchange="renderAll()">
+      <option value="score">优先级分数</option>
+      <option value="time">时间从短到长</option>
+      <option value="urg">紧急程度</option>
+      <option value="imp">重要程度</option>
+      <option value="cat">分类</option>
+    </select>
+  </div>
+
+  <div id="sections"></div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">添加任务</div>
+    <div class="form-row">
+      <label class="form-label">任务名称 *</label>
+      <input class="form-input" id="f-name" type="text" placeholder="e.g. 整理合同审查清单">
+    </div>
+    <div class="form-row-2">
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">分类</label>
+        <input class="form-input" id="f-cat" type="text" placeholder="法务 / 省考 / 投资…">
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">预计时间（分钟）</label>
+        <input class="form-input" id="f-time" type="number" placeholder="30" min="1">
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:13px">
+      <div class="form-row-2">
+        <div>
+          <label class="form-label">紧急程度</label>
+          <select class="form-select" id="f-urg">
+            <option>高</option><option selected>中</option><option>低</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">重要程度</label>
+          <select class="form-select" id="f-imp">
+            <option>高</option><option selected>中</option><option>低</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">备注（可选）</label>
+      <textarea class="form-textarea" id="f-note" placeholder="背景说明、参考链接等…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn-save" onclick="saveTask()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'taskpool_v1';
+const urgRank = { '高': 3, '中': 2, '低': 1 };
+
+let tasks = [];
+let editId = null;
+
+function loadTasks() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    tasks = raw ? JSON.parse(raw) : getSampleTasks();
+  } catch(e) { tasks = getSampleTasks(); }
+}
+
+function saveTasks() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+}
+
+function getSampleTasks() {
+  return [
+    { id: 1, name: '完善合同审查清单（零星工程）', cat: '法务', urg: '高', imp: '高', time: 60, note: '覆盖工程量确认和现场签证机制', done: false, created: Date.now() },
+    { id: 2, name: '复习省考言语理解专项', cat: '省考', urg: '中', imp: '高', time: 45, note: '重点练逻辑填空和主旨概括', done: false, created: Date.now() },
+    { id: 3, name: '检查立华股份季报', cat: '投资', urg: '低', imp: '中', time: 20, note: '', done: false, created: Date.now() },
+    { id: 4, name: '整理元典MCP工作流文档', cat: '工具', urg: '低', imp: '高', time: 30, note: '', done: false, created: Date.now() },
+  ];
+}
+
+function score(t) {
+  return urgRank[t.urg] * 2 + urgRank[t.imp] * 2 - (t.time > 60 ? 1 : 0);
+}
+
+function fmtTime(m) {
+  if (!m) return '—';
+  if (m < 60) return m + ' 分';
+  const h = Math.floor(m / 60), r = m % 60;
+  return h + 'h' + (r ? r + 'm' : '');
+}
+
+function getFiltered() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const fc = document.getElementById('filt-cat').value;
+  const fu = document.getElementById('filt-urg').value;
+  const fi = document.getElementById('filt-imp').value;
+  const ft = parseInt(document.getElementById('filt-time').value) || 0;
+  const sk = document.getElementById('sort-key').value;
+
+  let arr = tasks.filter(t => {
+    if (t.done) return false;
+    if (q && !t.name.toLowerCase().includes(q) && !(t.cat||'').toLowerCase().includes(q)) return false;
+    if (fc && t.cat !== fc) return false;
+    if (fu && t.urg !== fu) return false;
+    if (fi && t.imp !== fi) return false;
+    if (ft && t.time > ft) return false;
+    return true;
+  });
+
+  arr.sort((a, b) => {
+    if (sk === 'score') return score(b) - score(a);
+    if (sk === 'time') return (a.time || 9999) - (b.time || 9999);
+    if (sk === 'urg') return urgRank[b.urg] - urgRank[a.urg];
+    if (sk === 'imp') return urgRank[b.imp] - urgRank[a.imp];
+    if (sk === 'cat') return (a.cat||'').localeCompare(b.cat||'');
+    return 0;
+  });
+  return arr;
+}
+
+function renderAll() {
+  updateCatFilter();
+  updateStats();
+  const arr = getFiltered();
+  const done = tasks.filter(t => t.done);
+  const container = document.getElementById('sections');
+
+  let html = '';
+
+  if (arr.length === 0) {
+    html += `<div style="text-align:center;padding:48px 0;color:var(--text3);font-size:13px;">没有匹配的待办任务</div>`;
+  } else {
+    html += renderSection('待办任务', arr, false);
+  }
+
+  if (done.length > 0) {
+    html += renderSection('已完成', done, true);
+  }
+
+  container.innerHTML = html;
+}
+
+function renderSection(title, arr, isDone) {
+  let rows = '';
+  arr.forEach((t, i) => {
+    const sc = score(t);
+    rows += `
+    <tr class="task-row${isDone ? '' : ''}" onclick="openModal(${t.id})">
+      <td class="task-name-cell">
+        <div class="task-name${isDone ? ' done-task-name' : ''}">${escHtml(t.name)}</div>
+        ${t.note ? `<div class="task-note">${escHtml(t.note)}</div>` : ''}
+      </td>
+      <td><span class="badge cat-badge">${escHtml(t.cat || '其他')}</span></td>
+      <td><span class="badge urg-${t.urg}">${t.urg}</span></td>
+      <td><span class="badge imp-${t.imp}">${t.imp}</span></td>
+      <td class="time-cell">${fmtTime(t.time)}</td>
+      <td class="score-cell col-score">${sc}</td>
+      <td onclick="event.stopPropagation()">
+        <div class="action-cell">
+          ${!isDone
+            ? `<button class="icon-btn done" title="标记完成" onclick="doneTask(${t.id})">✓</button>`
+            : `<button class="icon-btn done" title="恢复待办" onclick="undoneTask(${t.id})">↩</button>`
+          }
+          <button class="icon-btn edit" title="编辑" onclick="openModal(${t.id})">✎</button>
+          <button class="icon-btn del" title="删除" onclick="delTask(${t.id})">✕</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  return `
+  <div class="section${isDone ? ' done-section' : ''}">
+    <div class="section-header">
+      <span class="section-title">${title}</span>
+      <span class="section-count">${arr.length}</span>
+    </div>
+    <table class="task-table">
+      <colgroup>
+        <col><col class="col-cat"><col class="col-urg"><col class="col-imp">
+        <col class="col-time"><col class="col-score"><col class="col-act">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>任务</th>
+          <th>分类</th>
+          <th>紧急</th>
+          <th>重要</th>
+          <th>时间</th>
+          <th class="col-score">优先</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function updateCatFilter() {
+  const cats = [...new Set(tasks.map(t => t.cat).filter(Boolean))].sort();
+  const sel = document.getElementById('filt-cat');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">全部</option>' + cats.map(c => `<option${c===cur?' selected':''}>${escHtml(c)}</option>`).join('');
+}
+
+function updateStats() {
+  const pending = tasks.filter(t => !t.done);
+  const urgent = pending.filter(t => t.urg === '高').length;
+  const totalMin = pending.reduce((s, t) => s + (t.time || 0), 0);
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  const timeStr = (h ? h + 'h ' : '') + (m ? m + 'm' : (h ? '' : '0m'));
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat">待办 <strong>${pending.length}</strong></div>
+    <div class="stat">紧急 <strong style="color:var(--red)">${urgent}</strong></div>
+    <div class="stat">总时长 <strong>${timeStr}</strong></div>
+  `;
+}
+
+function openModal(id) {
+  editId = id || null;
+  document.getElementById('modal-title').textContent = editId ? '编辑任务' : '添加任务';
+  if (editId) {
+    const t = tasks.find(x => x.id === editId);
+    if (!t) return;
+    document.getElementById('f-name').value = t.name || '';
+    document.getElementById('f-cat').value = t.cat || '';
+    document.getElementById('f-urg').value = t.urg || '中';
+    document.getElementById('f-imp').value = t.imp || '中';
+    document.getElementById('f-time').value = t.time || '';
+    document.getElementById('f-note').value = t.note || '';
+  } else {
+    document.getElementById('f-name').value = '';
+    document.getElementById('f-cat').value = '';
+    document.getElementById('f-urg').value = '中';
+    document.getElementById('f-imp').value = '中';
+    document.getElementById('f-time').value = '';
+    document.getElementById('f-note').value = '';
+  }
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('f-name').focus(), 60);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  editId = null;
+}
+
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+
+function saveTask() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { document.getElementById('f-name').focus(); return; }
+  const t = {
+    id: editId || Date.now(),
+    name,
+    cat: document.getElementById('f-cat').value.trim() || '其他',
+    urg: document.getElementById('f-urg').value,
+    imp: document.getElementById('f-imp').value,
+    time: parseInt(document.getElementById('f-time').value) || 0,
+    note: document.getElementById('f-note').value.trim(),
+    done: editId ? (tasks.find(x => x.id === editId)||{}).done || false : false,
+    created: editId ? (tasks.find(x => x.id === editId)||{}).created || Date.now() : Date.now(),
+  };
+  if (editId) {
+    tasks = tasks.map(x => x.id === editId ? t : x);
+    toast('已更新');
+  } else {
+    tasks.push(t);
+    toast('已添加');
+  }
+  saveTasks();
+  closeModal();
+  renderAll();
+}
+
+function doneTask(id) {
+  tasks = tasks.map(t => t.id === id ? { ...t, done: true } : t);
+  saveTasks();
+  renderAll();
+  toast('完成 ✓');
+}
+
+function undoneTask(id) {
+  tasks = tasks.map(t => t.id === id ? { ...t, done: false } : t);
+  saveTasks();
+  renderAll();
+}
+
+function delTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  saveTasks();
+  renderAll();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function exportTasks() {
+  const date = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const fname = `tasks_${date.getFullYear()}${pad(date.getMonth()+1)}${pad(date.getDate())}.json`;
+  const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fname;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已导出 ' + fname);
+}
+
+function importTasks(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if (!Array.isArray(imported)) throw new Error('格式错误');
+      if (!confirm(`导入 ${imported.length} 条任务？\n这会覆盖当前所有数据。`)) return;
+      tasks = imported;
+      saveTasks();
+      renderAll();
+      toast('导入成功，共 ' + imported.length + ' 条');
+    } catch(err) {
+      alert('导入失败：文件格式不正确');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('open')) {
+    if (document.activeElement.tagName !== 'TEXTAREA') saveTask();
+  }
+});
+
+loadTasks();
+renderAll();
+</script>
+</body>
+</html>
